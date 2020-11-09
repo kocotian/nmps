@@ -11,7 +11,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.1.1"
+#define VERSION "a0.1.3"
 
 extern void herror(const char *s);
 
@@ -26,7 +26,7 @@ authorize(char *host, const char *port, char *username, char *password)
 {
 	size_t size;
 	char *buffer, *args[] = {username, password, NULL};
-	if (!(size = request(host, atoi(port), "/auth", args, &buffer)))
+	if (!(size = request(host, atoi(port), "auth", args, &buffer)))
 		return 1;
 	else {
 		if(!strcmp(truncateHeader(buffer), "Authorized"))
@@ -42,7 +42,7 @@ request(char *hostname, unsigned short port,
 		char *command, char *args[], char **buffer)
 {
 	char *argv = calloc(0, 1);
-	char *request_template = "GET %s?argv=%s HTTP/1.0\r\nHost: %s\r\n\r\n";
+	char *request_template = "GET /%s HTTP/1.0\r\nargv: %s\r\nHost: %s\r\n\r\n";
 	char request[BUFSIZ];
 	int iter = -1, argvsize = 0, request_length;
 	while (args[++iter] != NULL) {
