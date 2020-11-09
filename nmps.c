@@ -10,5 +10,5 @@ int
 main(int argc, char *argv[])
 {
 	(void)argc; (void)argv;
-	puts("welcome in npms"VERSION);
+	puts("welcome in npms version "VERSION);
 }
