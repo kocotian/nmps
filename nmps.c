@@ -15,14 +15,14 @@
 
 extern void herror(const char *s);
 
-static size_t authorize(const char *host, const char *port, const char *username, const char *password);
+static size_t authorize(char *host, const char *port, char *username, char *password);
 static size_t request(char *hostname, unsigned short port, char *command, char *args[], char **buffer);
 static void usage(void);
 
 char *argv0;
 
 static size_t
-authorize(const char *host, const char *port, const char *username, const char *password)
+authorize(char *host, const char *port, char *username, char *password)
 {
 	size_t size;
 	char *buffer, *args[] = {username, password, NULL};
@@ -32,8 +32,9 @@ authorize(const char *host, const char *port, const char *username, const char *
 		if(!strcmp(truncateHeader(buffer), "Authorized"))
 			return size;
 		else
-			die("%s", truncateHeader(buffer));
+			die("Permission denied: %s", truncateHeader(buffer));
 	}
+	return 0;
 }
 
 static size_t
