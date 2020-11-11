@@ -11,7 +11,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.1.4"
+#define VERSION "a0.1.4.1"
 
 extern void herror(const char *s);
 
@@ -19,7 +19,7 @@ static size_t authorize(char *host, const char *port, char *username, char *pass
 static size_t request(char *hostname, unsigned short port, char *command, char *args[], char **buffer);
 static void usage(void);
 
-static char *authtoken;
+static char *authtoken = NULL;
 char *argv0;
 
 static size_t
@@ -47,7 +47,7 @@ request(char *hostname, unsigned short port,
 		char *command, char *args[], char **buffer)
 {
 	char *argv = calloc(0, 1);
-	char *request_template = "GET /%s HTTP/1.0\r\nargv: %s\r\nHost: %s\r\n\r\n";
+	char *request_template = "GET /%s HTTP/1.0\r\nargv: %s\r\nAuth-Token: %s\r\nHost: %s\r\n\r\n";
 	char request[BUFSIZ];
 	int iter = -1, argvsize = 0, request_length;
 	while (args[++iter] != NULL) {
@@ -56,7 +56,7 @@ request(char *hostname, unsigned short port,
 		strcat(argv, "\1");
 	}
 	request_length = snprintf(request, BUFSIZ, request_template,
-			command, argv, hostname);
+			command, argv, authtoken, hostname);
 	return sendHTTPRequest(hostname, port, request, request_length, buffer);
 }
 
