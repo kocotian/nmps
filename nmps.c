@@ -11,7 +11,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.1.3"
+#define VERSION "a0.1.4"
 
 extern void herror(const char *s);
 
@@ -19,20 +19,25 @@ static size_t authorize(char *host, const char *port, char *username, char *pass
 static size_t request(char *hostname, unsigned short port, char *command, char *args[], char **buffer);
 static void usage(void);
 
+static char *authtoken;
 char *argv0;
 
 static size_t
 authorize(char *host, const char *port, char *username, char *password)
 {
 	size_t size;
-	char *buffer, *args[] = {username, password, NULL};
+	char *buffer, *args[] = {username, password, NULL},
+		 *duplicate, *tokenized;
 	if (!(size = request(host, atoi(port), "auth", args, &buffer)))
 		return 1;
 	else {
-		if(!strcmp(truncateHeader(buffer), "Authorized"))
+		duplicate = strdup(truncateHeader(buffer));
+		tokenized = strtok_r(duplicate, "\n", &duplicate);
+		if (!strcmp(tokenized, "Authorized")) {
+			authtoken = strtok_r(duplicate, "\n", &duplicate);
 			return size;
-		else
-			die("Permission denied: %s", truncateHeader(buffer));
+		} else
+			die("Permission denied: %s", tokenized);
 	}
 	return 0;
 }
@@ -98,6 +103,6 @@ main(int argc, char *argv[])
 	fprintf(stderr, "\033[0m");
 
 	if(authorize(host, port, username, password))
-		printf("Authorization successful!\n");
+		printf("Authorization successful!\nAuth token: %s\n", authtoken);
 	return 0;
 }
