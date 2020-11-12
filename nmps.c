@@ -11,14 +11,15 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.2"
+#define VERSION "a0.2.1"
 
 extern void herror(const char *s);
 
 static size_t authorize(char *host, const char *port, char *username, char *password);
+static int command(char *command, char *args, char *host, char *port);
+static int gameplay(char *username, char *host, char *port);
 static void mkconnect(char *username, char *host, char *port);
 static size_t request(char *hostname, unsigned short port, char *command, char *args, char **buffer);
-static int shell(char *username, char *host, char *port);
 static void usage(void);
 
 static char *authtoken = NULL;
@@ -46,6 +47,60 @@ authorize(char *host, const char *port, char *username, char *password)
 		} else
 			die("Permission denied: %s", tokenized);
 	}
+	return 0;
+}
+
+static int
+command(char *command, char *args, char *host, char *port)
+{
+	char *buffer, *truncbuf;
+	size_t reqsize;
+	if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
+		return -1;
+	truncbuf = truncateHeader(buffer);
+	if (*truncbuf > 0 && *truncbuf < 10)
+		++truncbuf; /* there will be steering sequences,
+					   reserved for simple comunication server -> client */
+	printf("%s%c", truncbuf,
+			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
+			== 030 /* ASCII 030 on the end simply means:
+					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
+			? '\0' : '\n');
+	free(buffer);
+	return 0;
+}
+
+static int
+gameplay(char *username, char *host, char *port)
+{
+	size_t linesize = 256;
+	char *line, *linedup, *token, *cmd,
+		 *args;
+	size_t argsize;
+	int cash = 100;
+	short health = 100, saturation = 100,
+		  protection = 100, emotion = 100, hydration = 100;
+
+	line = malloc(linesize);
+
+	while (1) {
+		argsize = 0;
+		printf(PS1);
+		getline(&line, &linesize, stdin);
+		if (line[strlen(line) - 1] == '\n')
+			line[strlen(line) - 1] = 0;
+		linedup = strdup(line);
+		cmd = strtok_r(linedup, " ", &linedup);
+		args = calloc(0, 1);
+		while ((token = strtok_r(linedup, " ", &linedup))) {
+			argsize += strlen(token) + 1;
+			args = realloc(args, argsize);
+			strcat(args, token); strcat(args, "\001");
+		}
+		if(command(cmd, args, host, port))
+			die("\033[1;31mSomething went wrong with your request!\033[0m");
+	}
+	free(line);
 	return 0;
 }
 
@@ -85,44 +140,6 @@ request(char *hostname, unsigned short port,
 	return sendHTTPRequest(hostname, port, request, request_length, buffer);
 }
 
-static int
-shell(char *username, char *host, char *port)
-{
-	size_t linesize = 256;
-	char *line, *linedup, *token, *command,
-		 *args, *buffer, *truncbuf;
-	size_t argsize, reqsize;
-
-	line = malloc(linesize);
-
-	while (1) {
-		argsize = 0;
-		printf(PS1,
-				username, host);
-		getline(&line, &linesize, stdin);
-		if (line[strlen(line) - 1] == '\n')
-			line[strlen(line) - 1] = 0;
-		linedup = strdup(line);
-		command = strtok_r(linedup, " ", &linedup);
-		args = calloc(0, 1);
-		while ((token = strtok_r(linedup, " ", &linedup))) {
-			argsize += strlen(token) + 1;
-			args = realloc(args, argsize);
-			strcat(args, token); strcat(args, "\001");
-		}
-		if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
-			die("\033[1;31mSomething went wrong with your request!\033[0m");
-		truncbuf = truncateHeader(buffer);
-		if (*truncbuf == 1)
-			++truncbuf; /* there will be steering sequences,
-						   reserved for simple comunication client <-> server */
-		printf("%s%c", truncbuf, buffer[reqsize - 1] == '\n' ? '\0' : '\n');
-		free(buffer);
-	}
-	free(line);
-	return 0;
-}
-
 static void
 usage(void)
 {
@@ -152,7 +169,8 @@ main(int argc, char *argv[])
 	host = argv[argc - 1];
 
 	mkconnect(username, host, port);
-	shell(username, host, port);
+	command("motd", "", host, port);
+	gameplay(username, host, port);
 
 	return 0;
 }
