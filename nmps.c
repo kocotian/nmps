@@ -154,7 +154,7 @@ request(char *hostname, unsigned short port,
 static void
 usage(void)
 {
-	die("usage: %s [-p port] <host>", argv0);
+	die("usage: %s [-u username] [-p port] <host>", argv0);
 }
 
 int
