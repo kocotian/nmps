@@ -1,17 +1,19 @@
 #define _XOPEN_SOURCE 700
 
+#include <sys/socket.h>
+
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include "arg.h"
+#include "getch.h"
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.2.1"
+#define VERSION "a0.2.2"
 
 extern void herror(const char *s);
 
@@ -58,9 +60,14 @@ command(char *command, char *args, char *host, char *port)
 	if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
 		return -1;
 	truncbuf = truncateHeader(buffer);
-	if (*truncbuf > 0 && *truncbuf < 10)
-		++truncbuf; /* there will be steering sequences,
-					   reserved for simple comunication server -> client */
+	if ((*truncbuf >  0 && *truncbuf < 10)
+	||  (*truncbuf > 10 && *truncbuf < 13)
+	||  (*truncbuf > 13 && *truncbuf < 24)) { /* steering sequences,
+												 reserved for simple comunication
+												 server -> client */
+		if (*truncbuf == 4)
+			exit(*(++truncbuf) - 1);
+	}
 	printf("%s%c", truncbuf,
 			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 			== 030 /* ASCII 030 on the end simply means:
@@ -77,6 +84,7 @@ gameplay(char *username, char *host, char *port)
 	char *line, *linedup, *token, *cmd,
 		 *args;
 	size_t argsize;
+	int commandret;
 	int cash = 100;
 	short health = 100, saturation = 100,
 		  protection = 100, emotion = 100, hydration = 100;
@@ -97,8 +105,8 @@ gameplay(char *username, char *host, char *port)
 			args = realloc(args, argsize);
 			strcat(args, token); strcat(args, "\001");
 		}
-		if(command(cmd, args, host, port))
-			die("\033[1;31mSomething went wrong with your request!\033[0m");
+		if((commandret = command(cmd, args, host, port)))
+			return commandret;
 	}
 	free(line);
 	return 0;
@@ -117,15 +125,18 @@ mkconnect(char *username, char *host, char *port)
 	}
 
 	fprintf(stderr, "succeeded!\n");
-	fprintf(stderr, "%s@%s's password: \033[8m", username, host);
-	while ((character = fgetc(stdin)) != '\n') {
+	fprintf(stderr, "%s@%s's password: ", username, host);
+	while ((character = getch(0)) != '\n') {
+		if (character == 127)
+			password[chiter--] = 0;
+		else
 		password[++chiter] = character;
 	}
 	password[++chiter] = 0;
-	fprintf(stderr, "\033[0m");
+	fprintf(stderr, "\n");
 
 	if(authorize(host, port, username, password))
-		printf("Authorization successful!\nAuth token: %s\n", authtoken);
+		fprintf(stderr, "Authorization successful!\n");
 }
 
 static size_t
@@ -150,11 +161,14 @@ int
 main(int argc, char *argv[])
 {
 	char *port = "80", *host = "localhost",
-		 username[32] = "unknown";
+		 *username = NULL;
 
 	ARGBEGIN {
 	case 'p':
 		port = ARGF();
+		break;
+	case 'u':
+		username = ARGF();
 		break;
 	case 'h': /* fallthrough */
 	default:
@@ -165,12 +179,17 @@ main(int argc, char *argv[])
 	if (argc != 1)
 		usage();
 
-	getlogin_r(username, 32);
+	if (username == NULL) {
+		username = malloc(32);
+		getlogin_r(username, 32);
+	}
 	host = argv[argc - 1];
 
 	mkconnect(username, host, port);
 	command("motd", "", host, port);
 	gameplay(username, host, port);
+
+	free(username);
 
 	return 0;
 }
