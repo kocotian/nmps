@@ -13,7 +13,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.2.2"
+#define VERSION "a0.2.2.1"
 
 extern void herror(const char *s);
 
@@ -179,9 +179,11 @@ main(int argc, char *argv[])
 	if (argc != 1)
 		usage();
 
-	if (username == NULL) {
+	if (username == NULL && defaultusername == NULL) {
 		username = malloc(32);
 		getlogin_r(username, 32);
+	} else if (username == NULL && defaultusername != NULL) {
+		username = strdup(defaultusername);
 	}
 	host = argv[argc - 1];
 

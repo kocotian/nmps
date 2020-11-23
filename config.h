@@ -2,3 +2,5 @@
 			health, saturation, protection, \
 			emotion, hydration, cash, \
 			username, host
+
+static const char *defaultusername		= NULL;
