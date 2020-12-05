@@ -14,17 +14,19 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.2.3"
+#define VERSION "a0.3"
 
 extern void herror(const char *s);
 
 static size_t authorize(char *host, const char *port, char *username, char *password);
-static int command(char *command, char *args, char *host, char *port);
+static int command(char *command, char *args, char *host, char *port, char *beforeOutput);
 static int gameplay(char *username, char *host, char *port);
 static void mkconnect(char *username, char *host, char *port);
 static size_t request(char *hostname, unsigned short port, char *command, char *args, char **buffer);
 static void usage(void);
 
+/* here are the functions that are "multi-threaded" */
+static void eventhandler(char *host, char *port);
 static void sighandler(int signo);
 
 static char *authtoken = NULL;
@@ -57,7 +59,7 @@ authorize(char *host, const char *port, char *username, char *password)
 }
 
 static int
-command(char *command, char *args, char *host, char *port)
+command(char *command, char *args, char *host, char *port, char *beforeOutput)
 {
 	char *buffer, *truncbuf;
 	size_t reqsize;
@@ -72,7 +74,7 @@ command(char *command, char *args, char *host, char *port)
 		if (*truncbuf == 4)
 			exit(*(++truncbuf) - 1);
 	}
-	printf("%s%c", truncbuf,
+	printf("%s%s%c", beforeOutput, truncbuf,
 			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
@@ -116,16 +118,14 @@ gameplay(char *username, char *host, char *port)
 				break;
 			case -1:
 				if (lastsigno == SIGINT) {
-					printf("-- interrupted");
+					puts("-- interrupted");
 					strcpy(line, "");
 					chiter = -1;
 				}
-				printf("\n"PS1);
-				if (lastsigno == SIGUSR1) {
+				printf(PS1);
+				if (lastsigno == SIGUSR1)
 					for (int i = 0; i <= chiter; ++i)
 						fputc(line[i], stdout);
-					break;
-				}
 				lastsigno = -1;
 				break;
 			default:
@@ -148,7 +148,7 @@ gameplay(char *username, char *host, char *port)
 				args = realloc(args, argsize);
 				strcat(args, token); strcat(args, "\001");
 			}
-			if((commandret = command(cmd, args, host, port)))
+			if((commandret = command(cmd, args, host, port, "")))
 				return commandret;
 		}
 	}
@@ -170,12 +170,11 @@ mkconnect(char *username, char *host, char *port)
 
 	fprintf(stderr, "succeeded!\n");
 	fprintf(stderr, "%s@%s's password: ", username, host);
-	while ((character = getch(0)) != '\n') {
+	while ((character = getch(0)) != '\n')
 		if (character == 127)
 			password[chiter--] = 0;
 		else
-		password[++chiter] = character;
-	}
+			password[++chiter] = character;
 	password[++chiter] = 0;
 	fprintf(stderr, "\n");
 
@@ -232,15 +231,28 @@ main(int argc, char *argv[])
 	host = argv[argc - 1];
 
 	mkconnect(username, host, port);
+	eventhandler(host, port);
 	signal(SIGINT, sighandler);
 	signal(SIGUSR1, sighandler);
-	command("motd", "", host, port);
+	command("motd", "", host, port, "");
 	while (1)
 		gameplay(username, host, port);
 
 	free(username);
 
 	return 0;
+}
+
+static void
+eventhandler(char *host, char *port)
+{
+	pid_t parentpid = getpid();
+	if (fork() == 0) {
+		while (1) {
+			command("eventSender", "", host, port, "\r");
+			kill(parentpid, SIGUSR1);
+		}
+	}
 }
 
 static void
