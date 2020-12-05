@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 
 #include <netdb.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.2.2.1"
+#define VERSION "a0.2.3"
 
 extern void herror(const char *s);
 
@@ -24,7 +25,10 @@ static void mkconnect(char *username, char *host, char *port);
 static size_t request(char *hostname, unsigned short port, char *command, char *args, char **buffer);
 static void usage(void);
 
+static void sighandler(int signo);
+
 static char *authtoken = NULL;
+static int lastsigno = -1;
 char *argv0;
 
 #include "config.h"
@@ -84,29 +88,69 @@ gameplay(char *username, char *host, char *port)
 	char *line, *linedup, *token, *cmd,
 		 *args;
 	size_t argsize;
-	int commandret;
+	int character, chiter = -1, commandret;
 	int cash = 100;
-	short health = 100, saturation = 100,
-		  protection = 100, emotion = 100, hydration = 100;
+	/* short health = 100, saturation = 100, */
+	/* 	  protection = 100, emotion = 100, hydration = 100; */
 
 	line = malloc(linesize);
 
 	while (1) {
 		argsize = 0;
 		printf(PS1);
-		getline(&line, &linesize, stdin);
+		/* getline(&line, &linesize, stdin); */
+		strcpy(line, "");
+		while ((character = getch(0)) != '\n') {
+			switch (character) {
+			case 127:
+				line[chiter--] = 0;
+				printf("\033[1D \033[1D");
+				break;
+			case 12:
+				printf("\033c\030"PS1);
+				for (int i = 0; i <= chiter; ++i)
+					fputc(line[i], stdout);
+				break;
+			case 27:
+				printf("^["); getch(1); getch(1);
+				break;
+			case -1:
+				if (lastsigno == SIGINT) {
+					printf("-- interrupted");
+					strcpy(line, "");
+					chiter = -1;
+				}
+				printf("\n"PS1);
+				if (lastsigno == SIGUSR1) {
+					for (int i = 0; i <= chiter; ++i)
+						fputc(line[i], stdout);
+					break;
+				}
+				lastsigno = -1;
+				break;
+			default:
+				line[++chiter] = character;
+				printf("%c", character);
+				break;
+			}
+		}
+		line[++chiter] = 0;
+		chiter = -1;
+		puts("");
 		if (line[strlen(line) - 1] == '\n')
 			line[strlen(line) - 1] = 0;
-		linedup = strdup(line);
-		cmd = strtok_r(linedup, " ", &linedup);
-		args = calloc(0, 1);
-		while ((token = strtok_r(linedup, " ", &linedup))) {
-			argsize += strlen(token) + 1;
-			args = realloc(args, argsize);
-			strcat(args, token); strcat(args, "\001");
+		if (strlen(line)) {
+			linedup = strdup(line);
+			cmd = strtok_r(linedup, " ", &linedup);
+			args = calloc(0, 1);
+			while ((token = strtok_r(linedup, " ", &linedup))) {
+				argsize += strlen(token) + 1;
+				args = realloc(args, argsize);
+				strcat(args, token); strcat(args, "\001");
+			}
+			if((commandret = command(cmd, args, host, port)))
+				return commandret;
 		}
-		if((commandret = command(cmd, args, host, port)))
-			return commandret;
 	}
 	free(line);
 	return 0;
@@ -188,10 +232,27 @@ main(int argc, char *argv[])
 	host = argv[argc - 1];
 
 	mkconnect(username, host, port);
+	signal(SIGINT, sighandler);
+	signal(SIGUSR1, sighandler);
 	command("motd", "", host, port);
-	gameplay(username, host, port);
+	while (1)
+		gameplay(username, host, port);
 
 	free(username);
 
 	return 0;
+}
+
+static void
+sighandler(int signo)
+{
+	signal(signo, sighandler);
+	lastsigno = signo;
+	switch (signo) {
+	case SIGINT:
+		puts("");
+		break;
+	case SIGUSR1:
+		break;
+	}
 }
