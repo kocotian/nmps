@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.3"
+#define VERSION "a0.3.4"
 
 extern void herror(const char *s);
 
@@ -31,6 +31,8 @@ static void sighandler(int signo);
 
 static char *authtoken = NULL;
 static int lastsigno = -1;
+static pid_t parentpid;
+
 char *argv0;
 
 #include "config.h"
@@ -71,16 +73,21 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 	||  (*truncbuf > 13 && *truncbuf < 24)) { /* steering sequences,
 												 reserved for simple comunication
 												 server -> client */
-		if (*truncbuf == 4) /* temporary fix */
+		if (*truncbuf == 4) { /* temporary fix */
 			exitAfter = *(++truncbuf);
+			++truncbuf;
+		}
 	}
 	printf("%s%s%c", beforeOutput, truncbuf,
 			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
 			? '\0' : '\n');
-	if (exitAfter)
+	if (exitAfter) {
+		if (getpid() != parentpid)
+			kill(parentpid, SIGTERM);
 		exit(exitAfter - 1);
+	}
 	free(buffer);
 	return 0;
 }
@@ -199,7 +206,7 @@ request(char *hostname, unsigned short port,
 static void
 usage(void)
 {
-	die("usage: %s [-u username] [-p port] <host>", argv0);
+	die("usage: %s [-v] [-u username] [-p port] <host>", argv0);
 }
 
 int
@@ -214,6 +221,9 @@ main(int argc, char *argv[])
 		break;
 	case 'u':
 		username = ARGF();
+		break;
+	case 'v':
+		die("nmps-"VERSION);
 		break;
 	case 'h': /* fallthrough */
 	default:
@@ -236,6 +246,7 @@ main(int argc, char *argv[])
 	eventhandler(host, port);
 	signal(SIGINT, sighandler);
 	signal(SIGUSR1, sighandler);
+	signal(SIGTERM, sighandler);
 	command("motd", "", host, port, "");
 	while (1)
 		gameplay(username, host, port);
@@ -248,7 +259,7 @@ main(int argc, char *argv[])
 static void
 eventhandler(char *host, char *port)
 {
-	pid_t parentpid = getpid();
+	parentpid = getpid();
 	if (fork() == 0)
 		while (1) {
 			command("eventSender", "", host, port, "\033[2K\r");
@@ -266,6 +277,9 @@ sighandler(int signo)
 		puts("");
 		break;
 	case SIGUSR1:
+		break;
+	case SIGTERM:
+		exit(0);
 		break;
 	}
 }
