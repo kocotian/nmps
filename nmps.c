@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3"
+#define VERSION "a0.3.1"
 
 extern void herror(const char *s);
 
@@ -72,13 +72,17 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 												 reserved for simple comunication
 												 server -> client */
 		if (*truncbuf == 4)
-			exit(*(++truncbuf) - 1);
+			goto deletinuser;
 	}
 	printf("%s%s%c", beforeOutput, truncbuf,
 			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
 			? '\0' : '\n');
+	if (0) {
+		deletinuser:
+		exit(*(++truncbuf) - 1);
+	}
 	free(buffer);
 	return 0;
 }
