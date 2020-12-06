@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.2"
+#define VERSION "a0.3.3"
 
 extern void herror(const char *s);
 
@@ -61,7 +61,7 @@ authorize(char *host, const char *port, char *username, char *password)
 static int
 command(char *command, char *args, char *host, char *port, char *beforeOutput)
 {
-	char *buffer, *truncbuf;
+	char *buffer, *truncbuf, exitAfter = 0;
 	size_t reqsize;
 	if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
 		return -1;
@@ -71,14 +71,16 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 	||  (*truncbuf > 13 && *truncbuf < 24)) { /* steering sequences,
 												 reserved for simple comunication
 												 server -> client */
+		if (*truncbuf == 4) /* temporary fix */
+			exitAfter = *(++truncbuf);
 	}
 	printf("%s%s%c", beforeOutput, truncbuf,
 			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
 			? '\0' : '\n');
-	if (*truncbuf == 4) /* temporary fix */
-		exit(*(++truncbuf) - 1);
+	if (exitAfter)
+		exit(exitAfter - 1);
 	free(buffer);
 	return 0;
 }
