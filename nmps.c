@@ -247,12 +247,11 @@ static void
 eventhandler(char *host, char *port)
 {
 	pid_t parentpid = getpid();
-	if (fork() == 0) {
+	if (fork() == 0)
 		while (1) {
-			command("eventSender", "", host, port, "\r");
+			command("eventSender", "", host, port, "\033[2K\r");
 			kill(parentpid, SIGUSR1);
 		}
-	}
 }
 
 static void
