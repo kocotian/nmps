@@ -5,3 +5,6 @@ nmps: nmps.c config.h getch.h
 
 install: nmps
 	install -Dm 755 nmps ${PREFIX}/bin
+
+clean: nmps
+	rm -f nmps
