@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.5"
+#define VERSION "a0.3.6"
 
 extern void herror(const char *s);
 
@@ -79,11 +79,12 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 			++truncbuf;
 		}
 	}
-	printf("%s%s%c", beforeOutput, truncbuf,
-			buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
-			== 030 /* ASCII 030 on the end simply means:
-					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
-			? '\0' : '\n');
+	if (strlen(truncbuf))
+		printf("%s%s%c", beforeOutput, truncbuf,
+				buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
+				== 030 /* ASCII 030 on the end simply means:
+						  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
+				? '\0' : '\n');
 
 	if (exitAfter) {
 		if (getpid() != parentpid)
@@ -286,7 +287,8 @@ sighandler(int signo)
 		break;
 	case SIGTERM:
 		if (getpid() == parentpid)
-			kill(eventpid, SIGKILL);
+			kill(eventpid, SIGTERM);
+		puts("Connection closed");
 		exit(0);
 		break;
 	}
