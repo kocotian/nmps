@@ -77,7 +77,7 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
 			? '\0' : '\n');
-	if (truncbuf == 4) /* temporary fix */
+	if (*truncbuf == 4) /* temporary fix */
 		exit(*(++truncbuf) - 1);
 	free(buffer);
 	return 0;
