@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.4"
+#define VERSION "a0.3.5"
 
 extern void herror(const char *s);
 
@@ -32,6 +32,7 @@ static void sighandler(int signo);
 static char *authtoken = NULL;
 static int lastsigno = -1;
 static pid_t parentpid;
+static pid_t eventpid;
 
 char *argv0;
 
@@ -83,9 +84,12 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 			== 030 /* ASCII 030 on the end simply means:
 					  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
 			? '\0' : '\n');
+
 	if (exitAfter) {
 		if (getpid() != parentpid)
 			kill(parentpid, SIGTERM);
+		else
+			kill(eventpid, SIGTERM);
 		exit(exitAfter - 1);
 	}
 	free(buffer);
@@ -260,11 +264,13 @@ static void
 eventhandler(char *host, char *port)
 {
 	parentpid = getpid();
-	if (fork() == 0)
+	if (fork() == 0) {
+		eventpid = getpid();
 		while (1) {
-			command("eventSender", "", host, port, "\033[2K\r");
+			command("eventSender", "", host, port, "\n");
 			kill(parentpid, SIGUSR1);
 		}
+	}
 }
 
 static void
@@ -279,6 +285,8 @@ sighandler(int signo)
 	case SIGUSR1:
 		break;
 	case SIGTERM:
+		if (getpid() == parentpid)
+			kill(eventpid, SIGKILL);
 		exit(0);
 		break;
 	}
