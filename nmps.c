@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.7"
+#define VERSION "a0.4-rc1"
 
 extern void herror(const char *s);
 
@@ -33,6 +33,9 @@ static char *authtoken = NULL;
 static int lastsigno = -1;
 static pid_t parentpid;
 static pid_t eventpid;
+
+static short health = 0, energy = 0,
+	saturation = 0, sanity = 0;
 
 char *argv0;
 
@@ -69,14 +72,34 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 	if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
 		return -1;
 	truncbuf = truncateHeader(buffer);
-	if ((*truncbuf >  0 && *truncbuf < 10)
+	while ((*truncbuf >  0 && *truncbuf < 10)
 	||  (*truncbuf > 10 && *truncbuf < 13)
 	||  (*truncbuf > 13 && *truncbuf < 24)) { /* steering sequences,
 												 reserved for simple comunication
 												 server -> client */
-		if (*truncbuf == 4) { /* temporary fix */
+		switch (*truncbuf) { /* temporary fix */
+		case 4:
 			exitAfter = *(++truncbuf);
 			++truncbuf;
+			break;
+		case 14:
+			++truncbuf;
+			switch(*(truncbuf++)) {
+			case 1: /* health */
+				health = strtol(truncbuf, NULL, 16);
+				break;
+			case 2: /* energy */
+				energy = strtol(truncbuf, NULL, 16);
+				break;
+			case 3: /* saturation */
+				saturation = strtol(truncbuf, NULL, 16);
+				break;
+			case 4: /* sanity */
+				sanity = strtol(truncbuf, NULL, 16);
+				break;
+			}
+			truncbuf += 3;
+			break;
 		}
 	}
 	if (strlen(truncbuf))
@@ -104,14 +127,10 @@ gameplay(char *username, char *host, char *port)
 		 *args;
 	size_t argsize;
 	int character, chiter = -1, commandret;
-	int cash = 100;
-	/* short health = 100, saturation = 100, */
-	/* 	  protection = 100, emotion = 100, hydration = 100; */
 
 	while (1) {
 		argsize = 0;
 		printf(PS1);
-		/* getline(&line, &linesize, stdin); */
 		strcpy(line, "");
 		while ((character = getch(0)) != '\n') {
 			switch (character) {
@@ -150,16 +169,19 @@ gameplay(char *username, char *host, char *port)
 		puts("");
 		if (line[strlen(line) - 1] == '\n')
 			line[strlen(line) - 1] = 0;
-		if (strlen(line)) {
+		if (strlen(line) && *line != '#') {
 			linedup = strdup(line);
-			cmd = strtok_r(linedup, " ", &linedup);
+			cmd = *linedup == '!' ? "say" : strtok_r(linedup, " ", &linedup);
+			if (*linedup == '!') ++linedup;
 			args = calloc(0, 1);
 			while ((token = strtok_r(linedup, " ", &linedup))) {
 				argsize += strlen(token) + 1;
 				args = realloc(args, argsize);
 				strcat(args, token); strcat(args, "\001");
 			}
-			if((commandret = command(cmd, args, host, port, "")))
+			commandret = command(cmd, args, host, port, "");
+			free(args);
+			if (commandret)
 				return commandret;
 		}
 	}
@@ -191,7 +213,7 @@ mkconnect(char *username, char *host, char *port)
 	if(authorize(host, port, username, password))
 		fprintf(stderr, "Authorization successful!\n");
 }
-
+ /* health */
 static size_t
 request(char *hostname, unsigned short port,
 		char *command, char *args, char **buffer)
