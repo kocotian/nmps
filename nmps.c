@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.3.6"
+#define VERSION "a0.3.7"
 
 extern void herror(const char *s);
 
@@ -80,7 +80,7 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 		}
 	}
 	if (strlen(truncbuf))
-		printf("%s%s%c", beforeOutput, truncbuf,
+		printf("%s%s\033[0m%c", beforeOutput, truncbuf,
 				buffer[reqsize - 1] == '\n' || buffer[reqsize - 1]
 				== 030 /* ASCII 030 on the end simply means:
 						  PLZ DON'T INSERT ENDL ON THE END!!1!1!!1 */
@@ -100,16 +100,13 @@ command(char *command, char *args, char *host, char *port, char *beforeOutput)
 static int
 gameplay(char *username, char *host, char *port)
 {
-	size_t linesize = 256;
-	char *line, *linedup, *token, *cmd,
+	char line[4096], *linedup, *token, *cmd,
 		 *args;
 	size_t argsize;
 	int character, chiter = -1, commandret;
 	int cash = 100;
 	/* short health = 100, saturation = 100, */
 	/* 	  protection = 100, emotion = 100, hydration = 100; */
-
-	line = malloc(linesize);
 
 	while (1) {
 		argsize = 0;
@@ -166,7 +163,6 @@ gameplay(char *username, char *host, char *port)
 				return commandret;
 		}
 	}
-	free(line);
 	return 0;
 }
 
@@ -248,11 +244,11 @@ main(int argc, char *argv[])
 	host = argv[argc - 1];
 
 	mkconnect(username, host, port);
+	command("motd", "", host, port, "");
 	eventhandler(host, port);
 	signal(SIGINT, sighandler);
 	signal(SIGUSR1, sighandler);
 	signal(SIGTERM, sighandler);
-	command("motd", "", host, port, "");
 	while (1)
 		gameplay(username, host, port);
 
@@ -286,8 +282,10 @@ sighandler(int signo)
 	case SIGUSR1:
 		break;
 	case SIGTERM:
-		if (getpid() == parentpid)
+		if (getpid() == parentpid && eventpid != 0)
 			kill(eventpid, SIGTERM);
+		else if (getpid() == eventpid && parentpid != 0)
+			kill(parentpid, SIGTERM);
 		puts("Connection closed");
 		exit(0);
 		break;
