@@ -14,7 +14,7 @@
 #include "http.h"
 #include "util.c"
 
-#define VERSION "a0.4-rc1"
+#define VERSION "a0.4-rc2"
 
 extern void herror(const char *s);
 
@@ -67,40 +67,49 @@ authorize(char *host, const char *port, char *username, char *password)
 static int
 command(char *command, char *args, char *host, char *port, char *beforeOutput)
 {
-	char *buffer, *truncbuf, exitAfter = 0;
+	char *buffer, *truncbuf, *tcb,
+		 *tcbstart, *tcbend, exitAfter = 0;
 	size_t reqsize;
 	if (!(reqsize = request(host, atoi(port), command, args, &buffer)))
 		return -1;
-	truncbuf = truncateHeader(buffer);
-	while ((*truncbuf >  0 && *truncbuf < 10)
-	||  (*truncbuf > 10 && *truncbuf < 13)
-	||  (*truncbuf > 13 && *truncbuf < 24)) { /* steering sequences,
-												 reserved for simple comunication
-												 server -> client */
-		switch (*truncbuf) { /* temporary fix */
-		case 4:
-			exitAfter = *(++truncbuf);
-			++truncbuf;
-			break;
-		case 14:
-			++truncbuf;
-			switch(*(truncbuf++)) {
-			case 1: /* health */
-				health = strtol(truncbuf, NULL, 16);
+	tcb = truncbuf = truncateHeader(buffer);
+	while (*tcb) {
+		if ((*tcb >  0 && *tcb < 10)
+		||  (*tcb > 10 && *tcb < 13)
+		||  (*tcb > 13 && *tcb < 24)) { /* steering sequences,
+										   reserved for simple comunication
+										   server -> client */
+			/* detected escape sequence `*tcb` @ `tcb` / char `tcb - truncbuf` */
+			tcbstart = tcb;
+			switch (*tcb) { /* temporary fix */
+			case 4:
+				exitAfter = *(++tcb);
+				++tcb;
 				break;
-			case 2: /* energy */
-				energy = strtol(truncbuf, NULL, 16);
-				break;
-			case 3: /* saturation */
-				saturation = strtol(truncbuf, NULL, 16);
-				break;
-			case 4: /* sanity */
-				sanity = strtol(truncbuf, NULL, 16);
+			case 14:
+				++tcb;
+				switch(*(tcb++)) {
+				case 1: /* health */
+					health = strtol(tcb, NULL, 16);
+					break;
+				case 2: /* energy */
+					energy = strtol(tcb, NULL, 16);
+					break;
+				case 3: /* saturation */
+					saturation = strtol(tcb, NULL, 16);
+					break;
+				case 4: /* sanity */
+					sanity = strtol(tcb, NULL, 16);
+					break;
+				}
+				tcb += 3;
 				break;
 			}
-			truncbuf += 3;
-			break;
-		}
+			tcbend = tcb;
+			/* end of sequence; difference: `(tcbend - tcbstart) - 1` */
+			/* filling `(tcbend - tcbstart) - 1` items from `tcbstart` with 031 */
+			memset(tcbstart, 031, tcbend - tcbstart);
+		} else ++tcb;
 	}
 	if (strlen(truncbuf))
 		printf("%s%s\033[0m%c", beforeOutput, truncbuf,
